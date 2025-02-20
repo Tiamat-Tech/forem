@@ -10,6 +10,19 @@ module Articles
     # @see config/feed-variants/README.md
     # @see app/models/articles/feeds/README.md
     class VariantQuery
+      Config = Struct.new(
+        :variant,
+        :description,
+        :levers, # Array <Articles::Feeds::RelevancyLever::Configured>
+        :order_by, # Articles::Feeds::OrderByLever
+        :max_days_since_published,
+        # when true, each time you call the query you will get different randomized numbers; when
+        # false, the resulting randomized numbers will be the same within a window of time.
+        :reseed_randomizer_on_each_request,
+        keyword_init: true,
+      ) do
+        alias_method :reseed_randomizer_on_each_request?, :reseed_randomizer_on_each_request
+      end
       # @api public
       #
       # @param variant [Symbol, #to_sym] the name of the variant query we're building.
@@ -25,20 +38,6 @@ module Articles
         new(config: config, **kwargs)
       end
 
-      Config = Struct.new(
-        :variant,
-        :description,
-        :levers, # Array <Articles::Feeds::RelevancyLever::Configured>
-        :order_by, # Articles::Feeds::OrderByLever
-        :max_days_since_published,
-        # when true, each time you call the query you will get different randomized numbers; when
-        # false, the resulting randomized numbers will be the same within a window of time.
-        :reseed_randomizer_on_each_request,
-        keyword_init: true,
-      ) do
-        alias_method :reseed_randomizer_on_each_request?, :reseed_randomizer_on_each_request
-      end
-
       # @param config [Articles::Feeds::VariantQuery::Config]
       # @param user [User,NilClass]
       # @param number_of_articles [Integer, #to_i]
@@ -48,18 +47,23 @@ module Articles
       # @param seed [Number] used in the `setseed` Postgresql function to set the randomization
       #        seed.  This parameter allows the caller (and debugger) to use the same randomization
       #        order in the queries; the hope being that this might help in any debugging.
-      def initialize(config:, user: nil, number_of_articles: 50, page: 1, tag: nil, seed: nil)
+      def initialize(config:, user: nil, number_of_articles: 50, page: 1, tag: nil, seed: nil, type_of: "discover")
         @user = user
         @number_of_articles = number_of_articles
         @page = page
         @tag = tag
         @config = config
+        @type_of = type_of
         @seed = randomizer_seed_for(seed: seed, user: user)
         oldest_published_at = Articles::Feeds.oldest_published_at_to_consider_for(
           user: @user,
           days_since_published: config.max_days_since_published,
         )
-        @query_parameters = { oldest_published_at: oldest_published_at }
+        @query_parameters = {
+          oldest_published_at: oldest_published_at,
+          conditional_lookback: oldest_published_at - 12.hours,
+          conditional_comment_timeframe: 6.hours.ago
+        }
         configure!
       end
 
@@ -87,7 +91,7 @@ module Articles
       #    puts strategy.call.to_sql
       #
       # rubocop:disable Layout/LineLength
-      def call(only_featured: false, must_have_main_image: false, limit: default_limit, offset: default_offset, omit_article_ids: [])
+      def call(only_featured: false, must_have_main_image: false, limit: default_limit, offset: default_offset, omit_article_ids: [], comments_variant: default_comments_variant)
         # rubocop:enable Layout/LineLength
 
         # These are the variables we'll pass to the SQL statement.
@@ -131,10 +135,33 @@ module Articles
         # This sub-query allows us to take the hard work of the hand-coded unsanitized sql and
         # create a sub-query that we can use to help ensure that we can use all of the ActiveRecord
         # goodness of scopes (e.g., limited_column_select) and eager includes.
-        Article.joins(join_fragment)
+        scope = Article.joins(join_fragment)
+          .from_subforem
           .limited_column_select
-          .includes(top_comments: :user)
+          .includes(:distinct_reaction_categories)
+          .includes(:subforem)
           .order(config.order_by.to_sql)
+
+        scope = case comments_variant
+                when "top_comments"
+                  scope.includes(top_comments: :user)
+                when "more_inclusive_top_comments"
+                  scope.includes(more_inclusive_top_comments: :user)
+                when "recent_good_comments"
+                  scope.includes(recent_good_comments: :user)
+                when "more_inclusive_recent_good_comments"
+                  scope.includes(more_inclusive_recent_good_comments: :user)
+                when "most_inclusive_recent_good_comments"
+                  scope.includes(most_inclusive_recent_good_comments: :user)
+                else
+                  scope.includes(top_comments: :user) # fallback default
+                end
+
+        if @user.present? && (hidden_tags = @user.cached_antifollowed_tag_names).any?
+          scope = scope.not_cached_tagged_with_any(hidden_tags)
+        end
+
+        scope
       end
 
       alias more_comments_minimal_weight_randomized call
@@ -255,14 +282,18 @@ module Articles
       end
 
       def build_sql_with_where_clauses(only_featured:, must_have_main_image:, omit_article_ids:)
-        where_clauses = "articles.published = true AND articles.published_at > :oldest_published_at"
-        # See Articles.published scope discussion regarding the query planner
+        # Hardcode the values for lookback_hours and comment_hours.
+        where_clauses = "articles.published = true"
         where_clauses += " AND articles.published_at < :now"
-        where_clauses += " AND articles.score >= 0" # We only want positive values here.
-
-        # Without the compact, if we have `omit_article_ids: [nil]` we
-        # have the following SQL clause: `articles.id NOT IN (NULL)`
-        # which will immediately omit EVERYTHING from the query.
+        where_clauses += " AND articles.score >= 0"
+        if @type_of == "discover"
+          where_clauses += " AND ((articles.published_at > :oldest_published_at)
+            OR (articles.published_at > :conditional_lookback
+            AND articles.last_comment_at > :conditional_comment_timeframe))"
+        elsif @user
+          user_ids = @user.cached_following_users_ids + @user.cached_following_organizations_ids + [0] # Adding one that will never be reached so we can have a valid SQL statement
+          where_clauses += " AND articles.user_id IN (#{user_ids.join(',')})"
+        end
         where_clauses += " AND articles.id NOT IN (:omit_article_ids)" unless omit_article_ids.compact.empty?
         where_clauses += " AND articles.featured = true" if only_featured
         where_clauses += " AND articles.main_image IS NOT NULL" if must_have_main_image
@@ -292,9 +323,13 @@ module Articles
       end
 
       def default_offset
-        return 0 if @page == 1
+        return 0 if @page.zero?
 
-        @page.to_i - (1 * default_limit)
+        (@page.to_i - 1) * default_limit
+      end
+
+      def default_comments_variant
+        "top_comments"
       end
 
       # We want to ensure that we're not randomizing someone's feed all the time; and instead aiming

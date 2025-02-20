@@ -1,21 +1,18 @@
 <% title t("views.dashboard.heading") %>
 <main id="main-content" class="crayons-layout crayons-layout--header-inside crayons-layout--2-cols">
-  <header class="crayons-page-header block">
-    <h1 class="crayons-title"><%= t("views.dashboard.heading") %></h1>
-    <%= render "actions_mobile" %>
-    <%= render "analytics" %>
-  </header>
-
-  <div class="crayons-layout__sidebar-left">
-    <%= render "actions" %>
-  </div>
-
+  <%= render("header_and_action", page_title: t("views.dashboard.heading")) %>
+  
   <div class="crayons-layout__content">
     <div class="flex items-center justify-between mt-3">
       <h2 class="hidden m:block crayons-subtitle-2"><%= t("views.dashboard.posts.heading") %></h2>
 
       <div class="flex flex-wrap px-3 gap-2">
         <% if params[:which] != "organization" %>
+          <% if params[:state] == "status" %>
+            <%= link_to t("views.dashboard.posts.full"), "/dashboard", class: "crayons-btn crayons-btn--outlined whitespace-nowrap" %>
+          <% else %>
+            <%= link_to t("views.dashboard.posts.statuses"), "/dashboard?state=status", class: "crayons-btn crayons-btn--outlined whitespace-nowrap" %>
+          <% end %>
           <% if @articles.any?(&:archived) %>
             <%= link_to t("views.dashboard.posts.archived"), "javascript:;", id: "toggleArchivedLink", class: "crayons-btn crayons-btn--outlined whitespace-nowrap" %>
           <% end %>
@@ -36,11 +33,11 @@
     </div>
 
     <% if @articles.any? %>
-      <%= javascript_packs_with_chunks_tag "dashboardDropdowns", defer: true %>
+      <%= javascript_include_tag "dashboardDropdowns", defer: true %>
       <div class="crayons-card mb-6 mt-3">
         <% @articles.each do |article| %>
           <% if params[:which] == "organization" %>
-            <%= render "dashboard_article_row", article: article, organization: article.organization, org_admin: true, manage_view: false %>
+            <%= render "dashboard_article_row", article: article, organization: article.organization, org_admin: true, manage_view: false, article_series: article.collection.present? %>
           <% else %>
             <%= render "dashboard_article_row", article: article, organization: nil, org_admin: false, manage_view: false %>
           <% end %>
@@ -55,7 +52,7 @@
       <div class="p-6 m:p-9 crayons-card crayons-card--secondary align-center fs-l h-100 flex items-center justify-center flex-1">
         <div>
           <% if Settings::General.mascot_image_url.present? %>
-            <% image_url = Images::Optimizer.call(Settings::General.mascot_image_url, width: 300, crop: "imagga_scale") %>
+            <% image_url = Images::Optimizer.call(Settings::General.mascot_image_url, width: 300, crop: "crop") %>
             <%= image_tag(image_url, class: "sloan mb-7", alt: "Mascot image") %>
           <% end %>
           <p class="mb-6"><%= t("views.dashboard.posts.empty.desc") %></p>
@@ -67,3 +64,5 @@
     <% end %>
   </div>
 </main>
+
+<%= javascript_include_tag "archivedPostFilters", "dashboards/convertCoauthorIdsToUsernameInputs", defer: true %>

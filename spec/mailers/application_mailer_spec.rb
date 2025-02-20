@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe ApplicationMailer, type: :mailer do
+RSpec.describe ApplicationMailer do
   let(:user) { create(:user) }
   let(:email) { VerificationMailer.with(user_id: user.id).account_ownership_verification_email }
 
@@ -29,6 +29,26 @@ RSpec.describe ApplicationMailer, type: :mailer do
       email.deliver_now
 
       expect(described_class.deliveries.last.delivery_method.settings).to eq(Settings::SMTP.settings)
+    end
+  end
+
+  context "magic link heads up logic" do
+    it "includes the magic link heads up if user has no page views past 4 weeks" do
+      create(:page_view, user: user, created_at: 5.weeks.ago)
+      user.page_views.destroy_all
+
+      email.deliver_now
+
+      expect(email.body.encoded).to include("Not signed-in on this device?")
+    end
+
+    it "does not include the magic link heads up if user has page views past 4 weeks" do
+      # Ensure recent page view exists
+      create(:page_view, user: user, created_at: 3.weeks.ago)
+
+      email.deliver_now
+
+      expect(email.body.encoded).not_to include("Not signed-in on this device?")
     end
   end
 end

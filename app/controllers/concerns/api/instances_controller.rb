@@ -15,6 +15,8 @@ module Api
         version: release_version,
         visibility: visibility
       }, status: :ok
+
+      set_cache_control_headers(600) if Settings::UserExperience.public
     end
 
     private
@@ -26,7 +28,7 @@ module Api
     end
 
     def release_version
-      File.read(Rails.root.join(".release-version"))
+      Rails.root.join(".release-version").read
 
     # Accommodate the .release-version file not existing in the case where
     # this deployment is deployed from a checkout/snapshot of the code.

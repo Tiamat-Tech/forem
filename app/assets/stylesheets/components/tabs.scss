@@ -126,7 +126,7 @@
 
 .crayons-navigation {
   --tab-horizontal-padding: var(--su-3);
-  --tab-vertical-padding: var(--su-2);
+  --tab-vertical-padding: var(--su-1);
 
   display: flex;
   overflow-x: auto;
@@ -165,9 +165,9 @@
       color: var(--base-100);
 
       @media (min-width: $breakpoint-s) {
-        background: var(--base-inverted);
+        background: var(--link-bg-current);
         &:hover {
-          background: var(--base-inverted);
+          background: var(--link-bg-current);
         }
       }
     }

@@ -35,8 +35,8 @@ fr:
         aria_label: Add to reading list
         icon: Save button
         text: Save
-      readinglist:
-        title: Sauver
-        aria_label: Add to reading list
+      subscribe:
+        title: Subscribe to Comments
+        aria_label: Subscribe to Comments
         icon: Save button
-        text: Save
+        text: Subscribe to Comments

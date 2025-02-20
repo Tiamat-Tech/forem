@@ -24,7 +24,7 @@ module Api
 
     def show
       @organization = Organization.select(SHOW_ATTRIBUTES_FOR_SERIALIZATION)
-        .find_by!(username: params[:username])
+        .find_by!(username: params[:id_or_slug])
     end
 
     def users
@@ -53,7 +53,7 @@ module Api
       num = [per_page, per_page_max].min
       page = params[:page] || 1
 
-      @articles = @organization.articles.published
+      @articles = @organization.articles.published.from_subforem
         .select(ARTICLES_FOR_SERIALIZATION)
         .includes(:user)
         .order(published_at: :desc)
@@ -71,7 +71,11 @@ module Api
     end
 
     def find_organization
-      @organization = Organization.find_by!(username: params[:organization_username])
+      # Looking up via id_or_slug parameter since both types of lookup are handled in
+      # the v1 show route
+      @organization = Organization.find_by(id: params[:organization_id_or_slug]) ||
+        Organization.find_by(username: params[:organization_id_or_slug])
+      raise ActiveRecord::RecordNotFound unless @organization
     end
   end
 end

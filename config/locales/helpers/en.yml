@@ -13,8 +13,6 @@ en:
         name: Name
         slug: Username
         profile_image: Profile image
-        nav_image: Logo for light themes
-        dark_nav_image: Logo for dark themes
         twitter_username: Twitter username
         github_username: GitHub username
         url: Website url
@@ -65,7 +63,7 @@ en:
         mobile_comment_notifications: Send me a push notification when someone replies to me in a comment thread
         welcome_notifications: Send me occasional tips on how to enhance my %{community} experience
         reaction_notifications: Send notifications when someone reacts to my content, such as comments or posts
-        mod_roundrobin_notifications: Send me occasional community-success mod notifications
+        mod_roundrobin_notifications: Send me notifications about new member activity
       users_setting:
         feed_url: RSS Feed URL
     placeholder:
@@ -120,7 +118,7 @@ en:
     authentication_helper:
       any_of_those: any of those
       email_password: Email & Password
-      reminder: 'Reminder: you used %{method} to authenticate your account, so please use %{dem} to sign in if prompted.'
+      reminder: 'You used %{method} to authenticate your account originally, so you can use %{dem} — or send yourself a <a href="%{link}" style="color:black">magic link</a>.'
       that: that
       invite_only: You cannot do this until you disable Invite Only Mode
     comments_helper:

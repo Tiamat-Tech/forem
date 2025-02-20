@@ -12,11 +12,11 @@ FactoryBot.define do
     name do
       "#{Faker::Name.first_name} \"#{Faker::Name.first_name}\" \\:/ #{Faker::Name.last_name}"
     end
-    email                        { generate :email }
-    username                     { generate :username }
+    email                        { generate(:email) }
+    username                     { generate(:username) }
     profile_image                { Rack::Test::UploadedFile.new(image_path, "image/jpeg") }
-    twitter_username             { generate :twitter_username }
-    github_username              { generate :github_username }
+    twitter_username             { generate(:twitter_username) }
+    github_username              { generate(:github_username) }
     confirmed_at                 { Time.current }
     saw_onboarding               { true }
     checked_code_of_conduct      { true }
@@ -122,6 +122,14 @@ FactoryBot.define do
       after(:build) { |user| user.add_role(:comment_suspended) }
     end
 
+    trait :limited do
+      after(:build) { |user| user.add_role(:limited) }
+    end
+
+    trait :spam do
+      after(:build) { |user| user.add_role(:spam) }
+    end
+
     trait :invited do
       after(:build) do |user|
         user.registered = false
@@ -193,5 +201,13 @@ FactoryBot.define do
           .update_columns(email_newsletter: true, email_digest_periodic: true)
       end
     end
+
+    trait :without_newsletters do
+      after(:create) do |user|
+        Users::NotificationSetting.find_by(user_id: user.id)
+          .update_columns(email_newsletter: false, email_digest_periodic: true)
+      end
+    end
+
   end
 end

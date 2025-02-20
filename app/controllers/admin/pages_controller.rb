@@ -3,12 +3,12 @@ module Admin
     layout "admin"
 
     PAGE_ALLOWED_PARAMS = %i[
-      title slug body_markdown body_html body_json description template
+      title slug body_markdown body_html body_json body_css description template
       is_top_level_path social_image landing_page
     ].freeze
 
     def index
-      @pages = Page.all.order(created_at: :desc)
+      @pages = Page.from_subforem.order(created_at: :desc)
       @code_of_conduct = Page.find_by(slug: Page::CODE_OF_CONDUCT_SLUG)
       @privacy = Page.find_by(slug: Page::PRIVACY_SLUG)
       @terms = Page.find_by(slug: Page::TERMS_SLUG)
@@ -19,6 +19,8 @@ module Admin
 
       if (slug = params[:slug])
         prepopulate_new_form(slug)
+      elsif (params[:page])
+        @page = Page.find_by(id: params[:page])&.dup || Page.new
       else
         @page = Page.new
       end
@@ -29,27 +31,25 @@ module Admin
       @landing_page = Page.landing_page
     end
 
-    def update
-      @page = Page.find(params[:id])
-
-      if @page.update(page_params)
-        flash[:success] = I18n.t("admin.pages_controller.updated")
-        redirect_to admin_pages_path
-      else
-        flash.now[:error] = @page.errors_as_sentence
-        render :edit
-      end
-    end
-
     def create
       @page = Page.new(page_params)
-
       if @page.save
         flash[:success] = I18n.t("admin.pages_controller.created")
         redirect_to admin_pages_path
       else
         flash.now[:error] = @page.errors_as_sentence
         render :new
+      end
+    end
+
+    def update
+      @page = Page.find(params[:id])
+      if @page.update(page_params)
+        flash[:success] = I18n.t("admin.pages_controller.updated")
+        redirect_to admin_pages_path
+      else
+        flash.now[:error] = @page.errors_as_sentence
+        render :edit
       end
     end
 

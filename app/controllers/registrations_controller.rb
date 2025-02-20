@@ -8,6 +8,16 @@ class RegistrationsController < Devise::RegistrationsController
       store_location_for(:user, request.referer)
     end
 
+    if RequestStore.store[:subforem_id] &&
+        RequestStore.store[:root_subforem_id] &&
+        RequestStore.store[:subforem_id] != RequestStore.store[:default_subforem_id] &&
+        RequestStore.store[:subforem_id] != RequestStore.store[:root_subforem_id]
+      subforem = Subforem.find_by(id: RequestStore.store[:root_subforem_id])
+      return unless subforem
+
+      return redirect_to URL.url("/enter?state=#{params[:state]}", subforem), allow_other_host: true, status: :moved_permanently
+    end
+
     super
   end
 
@@ -22,17 +32,17 @@ class RegistrationsController < Devise::RegistrationsController
     build_devise_resource
 
     if resource.persisted?
-      update_first_user_permissions(resource)
+      resource.set_initial_roles!
 
-      if ForemInstance.smtp_enabled?
+      if resource.creator?
+        prepare_new_forem_instance
+        sign_in(resource)
+        redirect_to new_admin_creator_setting_path
+      elsif ForemInstance.smtp_enabled?
         redirect_to confirm_email_path(email: resource.email)
       else
         sign_in(resource)
-        if resource.roles.includes(:creator).any?
-          redirect_to new_admin_creator_setting_path
-        else
-          redirect_to root_path
-        end
+        redirect_to root_path
       end
     else
       render action: "by_email"
@@ -41,13 +51,7 @@ class RegistrationsController < Devise::RegistrationsController
 
   private
 
-  def update_first_user_permissions(resource)
-    return unless Settings::General.waiting_on_first_user
-
-    resource.add_role(:creator)
-    resource.add_role(:super_admin)
-    resource.add_role(:trusted)
-    resource.skip_confirmation!
+  def prepare_new_forem_instance
     Settings::General.waiting_on_first_user = false
     Users::CreateMascotAccount.call
     Discover::RegisterWorker.perform_async # Register Forem instance on https://discover.forem.com
@@ -77,7 +81,7 @@ class RegistrationsController < Devise::RegistrationsController
     build_resource(sign_up_params)
     resource.registered_at = Time.current
     resource.build_setting(editor_version: "v2")
-    resource.profile_image = Users::ProfileImageGenerator.call if resource.profile_image.blank?
+    resource.profile_image = Images::ProfileImageGenerator.call if resource.profile_image.blank?
     if Settings::General.waiting_on_first_user
       resource.password_confirmation = resource.password
     end

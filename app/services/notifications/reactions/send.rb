@@ -4,10 +4,15 @@ module Notifications
     class Send
       Response = Struct.new(:action, :notification_id)
 
+      def self.call(...)
+        new(...).call
+      end
+
       # @param reaction_data [Hash]
       #   * :reactable_id [Integer] - article or comment id
       #   * :reactable_type [String] - "Article" or "Comment"
       #   * :reactable_user_id [Integer] - user id
+      #   * :reactable_subforem_id [Integer] - subforem id
       # @param receiver [User] or [Organization]
       def initialize(reaction_data, receiver)
         @reaction = ReactionData.coerce(reaction_data)
@@ -15,10 +20,6 @@ module Notifications
       end
 
       delegate :user_data, to: Notifications
-
-      def self.call(...)
-        new(...).call
-      end
 
       # @return [OpenStruct, #action, #notification_id]
       def call
@@ -37,6 +38,7 @@ module Notifications
         notification_params = {
           notifiable_type: reaction.reactable_type,
           notifiable_id: reaction.reactable_id,
+          subforem_id: reaction.reactable_subforem_id,
           action: "Reaction"
         }
         case receiver
@@ -46,7 +48,7 @@ module Notifications
           notification_params[:organization_id] = receiver.id
         end
 
-        if aggregated_reaction_siblings.size.zero?
+        if aggregated_reaction_siblings.empty?
           Notification.where(notification_params).delete_all
           Response.new(:deleted)
         else

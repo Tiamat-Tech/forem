@@ -18,7 +18,7 @@ module CachingHeaders
   #
   # @see {EdgeCacheSafetyCheck#current_user} for impact on "current_user"
   def set_cache_control_headers(
-    max_age = 1.day.to_i,
+    max_age = ((ApplicationConfig["EDGE_CACHE_DURATION_IN_HOURS"] || 24).to_i).hours.to_i,
     surrogate_control: nil,
     stale_while_revalidate: nil,
     stale_if_error: 26_400
@@ -37,11 +37,23 @@ module CachingHeaders
     )
   end
 
+  def unset_cache_control_headers
+    RequestStore.store[:edge_caching_in_place] = false
+    response.headers["Cache-Control"] = nil
+    response.headers["X-Accel-Expires"] = nil
+    response.headers["Surrogate-Control"] = nil
+  end
+
   # Sets Surrogate-Key HTTP header with one or more keys strips session data
   # from the request.
   def set_surrogate_key_header(*surrogate_keys)
     request.session_options[:skip] = true # No Set-Cookie
     response.headers["Surrogate-Key"] = surrogate_keys.join(" ")
+  end
+
+  def add_vary_header(*vary_keys)
+    existing = response.headers["Vary"]
+    response.headers["Vary"] = [existing, *vary_keys].compact.join(", ")
   end
 
   private

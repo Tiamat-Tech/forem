@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe "articles/show", type: :view do
+RSpec.describe "articles/show" do
   let(:user1) { create(:user) }
   let(:article1) { create(:article, user_id: user1.id, show_comments: true) }
   let(:helper) { Class.new { extend CommentsHelper } }
@@ -63,7 +63,7 @@ RSpec.describe "articles/show", type: :view do
     render
     expect(rendered).to have_text("Originally published at")
     expect(rendered).to have_text("example.com")
-    expect(rendered).to have_text("Updated on")
+    expect(rendered).to have_text("Edited on")
   end
 
   it "shows the original publication time for crossposts" do
